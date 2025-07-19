@@ -4,8 +4,8 @@ from datetime import datetime
 import os
 
 # File path to save entries
-CSV_FILE = "/Users/nilanjandutta/Desktop/guest_entries.csv"
-PHOTO_DIR = "/Users/nilanjandutta/Desktop/guest_photos"
+CSV_FILE = CSV_FILE = "guest_entries.csv"
+PHOTO_DIR = "guest_photos"
 os.makedirs(PHOTO_DIR, exist_ok=True)
 
 st.set_page_config(page_title="Airbnb Guest Entry", layout="centered")
