@@ -3,15 +3,14 @@ import pandas as pd
 from datetime import datetime, date
 import os
 import urllib.parse
-import pdfkit
 import base64
+import io
+from xhtml2pdf import pisa
 
 # Constants
 CSV_FILE = "guest_entries.csv"
 PHOTO_DIR = "guest_photos"
 os.makedirs(PHOTO_DIR, exist_ok=True)
-
-PDFKIT_CONFIG = pdfkit.configuration(wkhtmltopdf="/usr/local/bin/wkhtmltopdf")
 
 st.set_page_config(page_title="Airbnb Guest Entry", layout="centered")
 st.title("\U0001F3E0 Airbnb Guest Entry Form")
@@ -44,7 +43,7 @@ if total_guests > 1:
         extra_ids.append(guest_id)
 
 # WhatsApp Admin Number
-ADMIN_PHONE_NUMBER = "917002296566"
+ADMIN_PHONE_NUMBER = "919876543210"
 
 def create_whatsapp_link(name, phone, place, remarks, stay_from, stay_to, total_guests, extra_guests):
     msg = f"New Airbnb Guest Entry:\nMain: {name}\nPhone: {phone}\nFrom: {place}\nStay: {stay_from} to {stay_to}\nTotal Guests: {total_guests}\n"
@@ -104,75 +103,88 @@ st.markdown("---")
 
 st.subheader("📋 View Guest Entries")
 if os.path.exists(CSV_FILE):
-    guest_df = pd.read_csv(CSV_FILE)
-    st.dataframe(guest_df, use_container_width=True)
+    try:
+        guest_df = pd.read_csv(CSV_FILE)
+    except pd.errors.ParserError:
+        st.error("⚠️ CSV file is corrupted. Please fix or reset guest_entries.csv.")
+        guest_df = pd.DataFrame()
 
-    st.download_button(
-        "📥 Download All Entries (CSV)",
-        guest_df.to_csv(index=False).encode("utf-8"),
-        file_name="guest_entries.csv",
-        mime="text/csv"
-    )
+    if not guest_df.empty:
+        st.dataframe(guest_df, use_container_width=True)
 
-    st.subheader("🖨️ Generate PDF for Guest")
-    if "Name" in guest_df.columns:
-        selected_guest = st.selectbox("Select Guest", guest_df["Name"].unique())
-        selected_row = guest_df[guest_df["Name"] == selected_guest].iloc[-1]
+        st.download_button(
+            "📥 Download All Entries (CSV)",
+            guest_df.to_csv(index=False).encode("utf-8"),
+            file_name="guest_entries.csv",
+            mime="text/csv"
+        )
 
-        def generate_html(row):
-            html = f"""
-            <html>
-            <body>
-            <h2>Guest Entry Details</h2>
-            <p><strong>Name:</strong> {row['Name']}</p>
-            <p><strong>Phone:</strong> {row['Phone']}</p>
-            <p><strong>From:</strong> {row['From']}</p>
-            <p><strong>Stay:</strong> {row['Stay_From']} to {row['Stay_To']}</p>
-            <p><strong>Total Guests:</strong> {row['Total_Guests']}</p>
-            <p><strong>Extra Guests:</strong> {row['Extra_Guests']}</p>
-            <p><strong>Remarks:</strong> {row['Remarks']}</p>
-            <p><strong>Timestamp:</strong> {row['Timestamp']}</p>
-            """
+        st.subheader("🖨️ Generate PDF for Guest")
+        if "Name" in guest_df.columns:
+            selected_guest = st.selectbox("Select Guest", guest_df["Name"].unique())
+            selected_row = guest_df[guest_df["Name"] == selected_guest].iloc[-1]
 
-            # --- Main Guest Photo ---
-            photo_file = str(row.get("Photo_File", "")).strip()
-            if photo_file and photo_file.lower() != "nan":
-                img_path = os.path.join(PHOTO_DIR, photo_file)
-                if os.path.exists(img_path) and img_path.lower().endswith((".jpg", ".jpeg", ".png")):
-                    with open(img_path, "rb") as img_file:
-                        b64_img = base64.b64encode(img_file.read()).decode()
-                        html += f'<p><strong>Main Guest ID:</strong><br><img src="data:image/png;base64,{b64_img}" width="250"/></p>'
+            def generate_html(row):
+                html = f"""
+                <html>
+                <body>
+                <h2>Guest Entry Details</h2>
+                <p><strong>Name:</strong> {row['Name']}</p>
+                <p><strong>Phone:</strong> {row['Phone']}</p>
+                <p><strong>From:</strong> {row['From']}</p>
+                <p><strong>Stay:</strong> {row['Stay_From']} to {row['Stay_To']}</p>
+                <p><strong>Total Guests:</strong> {row['Total_Guests']}</p>
+                <p><strong>Extra Guests:</strong> {row['Extra_Guests']}</p>
+                <p><strong>Remarks:</strong> {row['Remarks']}</p>
+                <p><strong>Timestamp:</strong> {row['Timestamp']}</p>
+                """
 
-            # --- Extra Guest Photos ---
-            extra_ids_str = str(row.get("Extra_IDs", "")).strip()
-            extra_names_str = str(row.get("Extra_Guests", "")).strip()
-
-            extra_names = [name.strip() for name in extra_names_str.split(",") if name.strip()]
-            extra_ids = [fid.strip() for fid in extra_ids_str.split(",") if fid.strip()]
-
-            if extra_names and extra_ids:
-                html += "<h3>Extra Guest ID Documents:</h3>"
-                for name, file in zip(extra_names, extra_ids):
-                    file_path = os.path.join(PHOTO_DIR, file)
-                    if os.path.exists(file_path) and file_path.lower().endswith((".jpg", ".jpeg", ".png")):
-                        with open(file_path, "rb") as img_file:
+                # Main Photo
+                photo_file = str(row.get("Photo_File", "")).strip()
+                if photo_file and photo_file.lower() != "nan":
+                    img_path = os.path.join(PHOTO_DIR, photo_file)
+                    if os.path.exists(img_path) and img_path.lower().endswith((".jpg", ".jpeg", ".png")):
+                        with open(img_path, "rb") as img_file:
                             b64_img = base64.b64encode(img_file.read()).decode()
-                            html += f'<p><strong>{name}</strong><br><img src="data:image/png;base64,{b64_img}" width="250"/></p>'
+                            html += f'<p><strong>Main Guest ID:</strong><br><img src="data:image/png;base64,{b64_img}" width="250"/></p>'
 
-            html += "</body></html>"
-            return html
+                # Extra Guest Photos
+                extra_ids_str = str(row.get("Extra_IDs", "")).strip()
+                extra_names_str = str(row.get("Extra_Guests", "")).strip()
 
+                extra_names = [name.strip() for name in extra_names_str.split(",") if name.strip()]
+                extra_ids = [fid.strip() for fid in extra_ids_str.split(",") if fid.strip()]
 
-        html_content = generate_html(selected_row)
-        pdf_path = f"{selected_guest.replace(' ', '_')}_entry.pdf"
-        pdfkit.from_string(html_content, pdf_path, configuration=PDFKIT_CONFIG)
+                if extra_names and extra_ids:
+                    html += "<h3>Extra Guest ID Documents:</h3>"
+                    for name, file in zip(extra_names, extra_ids):
+                        file_path = os.path.join(PHOTO_DIR, file)
+                        if os.path.exists(file_path) and file_path.lower().endswith((".jpg", ".jpeg", ".png")):
+                            with open(file_path, "rb") as img_file:
+                                b64_img = base64.b64encode(img_file.read()).decode()
+                                html += f'<p><strong>{name}</strong><br><img src="data:image/png;base64,{b64_img}" width="250"/></p>'
 
-        with open(pdf_path, "rb") as pdf_file:
-            st.download_button(
-                label="📄 Download Guest PDF",
-                data=pdf_file.read(),
-                file_name=pdf_path,
-                mime="application/pdf"
-            )
+                html += "</body></html>"
+                return html
+
+            def convert_html_to_pdf(source_html):
+                result = io.BytesIO()
+                pdf_status = pisa.CreatePDF(src=source_html, dest=result)
+                if pdf_status.err:
+                    return None
+                return result
+
+            html_content = generate_html(selected_row)
+            pdf_file_data = convert_html_to_pdf(html_content)
+
+            if pdf_file_data:
+                st.download_button(
+                    label="📄 Download Guest PDF",
+                    data=pdf_file_data.getvalue(),
+                    file_name=f"{selected_guest.replace(' ', '_')}_entry.pdf",
+                    mime="application/pdf"
+                )
+            else:
+                st.error("⚠️ Failed to generate PDF.")
 else:
     st.info("No entries yet.")
