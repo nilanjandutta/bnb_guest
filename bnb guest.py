@@ -43,7 +43,7 @@ if total_guests > 1:
         extra_ids.append(guest_id)
 
 # WhatsApp Admin Number
-ADMIN_PHONE_NUMBER = "917002296566"
+ADMIN_PHONE_NUMBER = "91XXXXXXXXXX"
 
 def create_whatsapp_link(name, phone, place, remarks, stay_from, stay_to, total_guests, extra_guests):
     msg = f"New Airbnb Guest Entry:\nMain: {name}\nPhone: {phone}\nFrom: {place}\nStay: {stay_from} to {stay_to}\nTotal Guests: {total_guests}\n"
@@ -93,33 +93,33 @@ if st.button("Submit Entry"):
         df = pd.DataFrame([new_entry])
         df.to_csv(CSV_FILE, mode="a", header=not os.path.exists(CSV_FILE), index=False)
 
-        st.success("✅ Entry recorded successfully!")
+        st.success("Entry recorded successfully!")
         wa_link = create_whatsapp_link(name, phone, place, remarks, stay_from, stay_to, total_guests, extra_guests)
-        st.markdown(f"[📲 Send to WhatsApp]({wa_link})", unsafe_allow_html=True)
+        st.markdown(f"[Send to WhatsApp]({wa_link})", unsafe_allow_html=True)
     else:
         st.warning("Please fill in at least Guest Name and Phone Number.")
 
 st.markdown("---")
 
-st.subheader("📋 View Guest Entries")
+st.subheader("View Guest Entries")
 if os.path.exists(CSV_FILE):
     try:
         guest_df = pd.read_csv(CSV_FILE)
     except pd.errors.ParserError:
-        st.error("⚠️ CSV file is corrupted. Please fix or reset guest_entries.csv.")
+        st.error("CSV file is corrupted. Please fix or reset guest_entries.csv.")
         guest_df = pd.DataFrame()
 
     if not guest_df.empty:
         st.dataframe(guest_df, use_container_width=True)
 
         st.download_button(
-            "📥 Download All Entries (CSV)",
+            "Download All Entries (CSV)",
             guest_df.to_csv(index=False).encode("utf-8"),
             file_name="guest_entries.csv",
             mime="text/csv"
         )
 
-        st.subheader("🖨️ Generate PDF for Guest")
+        st.subheader("Generate PDF for Guest")
         if "Name" in guest_df.columns:
             selected_guest = st.selectbox("Select Guest", guest_df["Name"].unique())
             selected_row = guest_df[guest_df["Name"] == selected_guest].iloc[-1]
@@ -179,12 +179,12 @@ if os.path.exists(CSV_FILE):
 
             if pdf_file_data:
                 st.download_button(
-                    label="📄 Download Guest PDF",
+                    label="Download Guest PDF",
                     data=pdf_file_data.getvalue(),
                     file_name=f"{selected_guest.replace(' ', '_')}_entry.pdf",
                     mime="application/pdf"
                 )
             else:
-                st.error("⚠️ Failed to generate PDF.")
+                st.error("Failed to generate PDF.")
 else:
     st.info("No entries yet.")
